@@ -1,64 +1,50 @@
 import numpy as np
+from nn.ops.src import conv2d
 import torch
-import torch.nn as nn
-import torch.nn.functional as f
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+import torch.nn.functional as F
+
+batch_size = 128
+in_channels = 64
+out_channels = 128
+in_height = 32
+in_width = 32
+
+x = np.random.randn(batch_size, in_channels, in_height, in_width).astype(np.float32)
+x2 = np.random.randn(batch_size, in_channels, in_height, in_width).astype(np.float32)
+kernel = np.random.randn(out_channels, in_channels, 3, 3).astype(np.float32)
+# x = np.array([[[[1, 2, 2, 3],
+#                 [3, 1, 2, 1],
+#                 [3, 3, 1, 2],
+#                 [1, 1, 2, 3]]]]).astype(np.float32)
+
+# kernel = np.array([[[[1, 2, 3],
+#                      [4, 5, 6],
+#                      [7, 8, 9]]]]).astype(np.float32)
+# x = np.ones((batch_size, in_channels, in_height, in_width)).astype(np.float32)
+# kernel = np.ones((out_channels, in_channels, 3, 3)).astype(np.float32)
+x_1 = torch.tensor(x, requires_grad=True)
+kernel_1 = torch.tensor(kernel, requires_grad=True)
+y_1 = F.conv2d(x_1, kernel_1)
+loss_1 = y_1.sum()
+loss_1.backward()
+# print(x_1.grad)
+
+# dx = conv2d.conv2d_backward_dx(kernel, dout, batch_size, in_height, in_width, in_channels, out_channels, 3, 3, 1)
+# dk = conv2d.conv2d_backward_dk(x, dout, batch_size, in_height, in_width, in_channels, out_channels, 3, 3, 1)
+dout = np.ones_like(y_1.detach().numpy())
+print(x.flags)
+# y = conv2d.conv2d(x, kernel, batch_size, in_height, in_width, in_channels, out_channels, 3, 3, 1)
+
+# y2 = conv2d.conv2d(x, kernel, batch_size, in_height, in_width, in_channels, out_channels, 3, 3, 1)
+# y3 = conv2d.conv2d(x, kernel, batch_size, in_height, in_width, in_channels, out_channels, 3, 3, 1)
+# y4 = conv2d.conv2d(x, kernel, batch_size, in_height, in_width, in_channels, out_channels, 3, 3, 1)
 
 
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 8, 5)
-        self.relu1 = nn.ReLU()
-        self.conv2 = nn.Conv2d(8, 16, 5)
-        self.relu2 = nn.ReLU()
-        self.conv3 = nn.Conv2d(16, 32, 5)
-        self.relu3 = nn.ReLU()
-        self.fc1 = nn.Linear(32 * 16 * 16, 128)
-        self.relu4 = nn.ReLU()
-        self.fc2 = nn.Linear(128, 10)
-        self.relu5 = nn.ReLU()
-        self.softmax = nn.Softmax()
+dx2, dk2 = conv2d.conv2d_backward(x, kernel, dout, batch_size, in_height, in_width, in_channels, out_channels, 3, 3, 1)
+# print(dk2, dx2)
+# print(dx)
 
-    def forward(self, x):
-        x = self.conv1(x)   # 4, 8, 24, 24
-        x = self.relu1(x)
-        x = self.conv2(x)   # 4, 16, 20, 20
-        x = self.relu2(x)
-        x = self.conv3(x)   # 4, 32, 16, 16
-        x = self.relu3(x)
-        x = x.reshape(4, 32 * 16 * 16)  # 4, 32 * 16 * 16
-        x = self.fc1(x)     # 4, 128
-        x = self.relu4(x)
-        x = self.fc2(x)     # 4, 10
-        x = self.relu5(x)
-        x = self.softmax(x) # 4, 1
-        return x
-
-
-net = Net()
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(net.parameters(), lr=0.001)
-
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))
-])
-train_dataset = datasets.MNIST(
-    root='./data',
-    train=True,
-    transform=transform,
-    download=True
-)
-
-train_loader = DataLoader(dataset=train_dataset, batch_size=4, shuffle=True)
-
-for epoch in range(10):
-    for i, (images, labels) in enumerate(train_loader):
-        optimizer.zero_grad()
-        outputs = net(images)
-        loss = criterion(outputs, labels)
-        print(f'predict: {torch.argmax(outputs.data, dim=1)},   gt: {labels.data}')
-        loss.backward()
-        optimizer.step()
+# print(np.allclose(y, y_1, atol=1e-6))
+# print(np.allclose(dx2, x_1.grad, atol=1e-5))
+# print(np.allclose(dk2, kernel_1.grad, atol=1e-4))
+# print(y)

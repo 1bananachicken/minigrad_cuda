@@ -1,5 +1,5 @@
-from CNN.tensor import *
-from CNN.nn.ops import _Conv
+from tensor import *
+# from nn.ops import _Conv
 
 
 class AddBackward:
@@ -80,7 +80,7 @@ class SoftmaxBackward:
 
 class CrossEntropyLossBackward:
     def __call__(self, pred: Tensor, target: Tensor) -> np.ndarray:
-        return -(target.data / pred.data) / pred.shape[0]
+        return -(target.data / pred.data)
 
 
 class MSELossBackward:

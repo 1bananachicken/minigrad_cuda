@@ -1,5 +1,6 @@
-from CNN.nn.backward_function import *
-from CNN.nn.ops import _Conv
+from nn.backward_function import *
+# from nn.ops import _Conv
+from nn.ops.src import conv2d
 import numpy as np
 
 
@@ -28,7 +29,7 @@ class Module:
 
 class Conv2d(Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int, padding: int = 0, stride: int = 1,
-                 bias: bool = True):
+                 bias: bool = False):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -57,26 +58,27 @@ class Conv2d(Module):
             x = Tensor(x_pad, prev=x.prev)
             del x_pad
 
-        _conv = _Conv(self.stride)
-        out_h = (x.shape[2] - self.kernel_size) // self.stride + 1
-        out_w = (x.shape[3] - self.kernel_size) // self.stride + 1
-        batch_size = x.shape[0]
-        out = np.zeros((batch_size, self.out_channels, out_h, out_w))
-        self.out_shape = out.shape
+        # _conv = _Conv(self.stride)
+        # out_h = (x.shape[2] - self.kernel_size) // self.stride + 1
+        # out_w = (x.shape[3] - self.kernel_size) // self.stride + 1
+        # batch_size = x.shape[0]
+        # out = np.zeros((batch_size, self.out_channels, out_h, out_w))
+        # self.out_shape = out.shape
 
-        for n in range(batch_size):
-            for i in range(self.out_channels):
-                for j in range(self.in_channels):
-                    out[n, i] += _conv(x.data[n, j], self.kernel.data[i, j])
+        # for n in range(batch_size):
+        #     for i in range(self.out_channels):
+        #         for j in range(self.in_channels):
+        #             out[n, i] += _conv(x.data[n, j], self.kernel.data[i, j])
 
-        if self.bias is not None:
-            out += self.bias.data
-
+        # if self.bias is not None:
+        #     out += self.bias.data
+        self.out_shape = (x.shape[0], self.out_channels, (x.shape[2] - self.kernel_size) // self.stride + 1, (x.shape[3] - self.kernel_size) // self.stride + 1)
+        out = conv2d.conv2d(x.data, self.kernel.data, x.shape[0], x.shape[2], x.shape[3], self.in_channels, self.out_channels, self.kernel_size, self.kernel_size, self.stride)
         out = Tensor(out, prev=(x, self))
         return out
 
     def backward(self, dout: np.ndarray) -> np.ndarray:
-        dx, dk, db = self.backward_function(self.x, dout, self.out_shape)
+        # dx, dk, db = self.backward_function(self.x, dout, self.out_shape)
         # _conv = _Conv(self.stride)
         # out_h = (self.x.shape[2] - self.kernel_size) // self.stride + 1
         # out_w = (self.x.shape[3] - self.kernel_size) // self.stride + 1
@@ -103,13 +105,17 @@ class Conv2d(Module):
         #                     dk[ic, jc] += dout[n, ic, ih, iw] * region
         #                     dx[n, jc, x_start:x_end, y_start:y_end] += dout[n, ic, ih, iw] * self.kernel.data[ic, jc]
         #
-        self.bias.grad = db
+        # self.bias.grad = db
+        dx, dk = conv2d.conv2d_backward(self.x.data, self.kernel.data, dout, self.x.shape[0], self.x.shape[2], self.x.shape[3], self.in_channels, self.out_channels, self.kernel_size, self.kernel_size, self.stride)
         self.kernel.grad = dk
 
         return dx
 
     def parameters(self):
-        return self.kernel, self.bias
+        if self.bias is not None:
+            return self.kernel, self.bias
+        else:
+            return self.kernel
 
 
 class Linear(Module):
@@ -144,8 +150,9 @@ class Linear(Module):
         return self.weight, self.bias
 
 
-class ReLU:
+class ReLU(Module):
     def __init__(self):
+        super().__init__()
         self.x = None
         self.backward_function = ReLUBackward()
 
@@ -164,8 +171,9 @@ class ReLU:
         return None
 
 
-class Softmax:
+class Softmax(Module):
     def __init__(self):
+        super().__init__()
         self.x = None
         self.sm = None
         self.backward_function = SoftmaxBackward()
