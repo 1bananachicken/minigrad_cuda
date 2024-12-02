@@ -1,6 +1,5 @@
 from nn.backward_function import *
 # from nn.ops import _Conv
-from nn.ops.src import conv2d
 import numpy as np
 
 
@@ -29,7 +28,7 @@ class Module:
 
 class Conv2d(Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int, padding: int = 0, stride: int = 1,
-                 bias: bool = False):
+                 bias: bool = True):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -72,8 +71,11 @@ class Conv2d(Module):
 
         # if self.bias is not None:
         #     out += self.bias.data
-        self.out_shape = (x.shape[0], self.out_channels, (x.shape[2] - self.kernel_size) // self.stride + 1, (x.shape[3] - self.kernel_size) // self.stride + 1)
         out = conv2d.conv2d(x.data, self.kernel.data, x.shape[0], x.shape[2], x.shape[3], self.in_channels, self.out_channels, self.kernel_size, self.kernel_size, self.stride)
+        self.out_shape = (x.shape[0], self.out_channels, out.shape[2], out.shape[3])
+        if self.bias is not None:
+            out = matadd.matAdd4d(out, self.bias.data, x.shape[0], self.out_channels, out.shape[2], out.shape[3])
+
         out = Tensor(out, prev=(x, self))
         return out
 
@@ -88,8 +90,7 @@ class Conv2d(Module):
         # db = np.zeros_like(self.bias.data)
         # dx = np.zeros_like(self.x)
         #
-        # if self.bias is not None:
-        #     db = np.sum(dout, axis=(0, 2, 3), keepdims=True)
+        
         #
         # for n in range(batch_size):
         #     for ic in range(self.out_channels):
@@ -105,8 +106,13 @@ class Conv2d(Module):
         #                     dk[ic, jc] += dout[n, ic, ih, iw] * region
         #                     dx[n, jc, x_start:x_end, y_start:y_end] += dout[n, ic, ih, iw] * self.kernel.data[ic, jc]
         #
-        # self.bias.grad = db
+        if dout.ndim != 4:
+            dout = dout.reshape(self.out_shape)
+
         dx, dk = conv2d.conv2d_backward(self.x.data, self.kernel.data, dout, self.x.shape[0], self.x.shape[2], self.x.shape[3], self.in_channels, self.out_channels, self.kernel_size, self.kernel_size, self.stride)
+        if self.bias is not None:
+            db = np.sum(dout, axis=(0, 2, 3), keepdims=True)
+        self.bias.grad = db
         self.kernel.grad = dk
 
         return dx
@@ -135,7 +141,8 @@ class Linear(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         self.x = x
-        out = Tensor(np.einsum('ij,kj->ik', x.data, self.weight.data) + self.bias.data, prev=(x, self))
+        out = matadd.matAdd2d(matmul.matmul(x.data, self.weight.data.T, x.shape[0], self.in_features, self.out_features), self.bias.data, self.x.shape[0], self.out_features)
+        out = Tensor(out, prev=(x, self))
         return out
 
     def backward(self, dout: np.ndarray) -> np.ndarray:
@@ -191,6 +198,29 @@ class Softmax(Module):
     def backward(self, dout: np.ndarray) -> np.ndarray:
         return self.backward_function(self.sm, dout)
 
+    def parameters(self):
+        return None
+
+
+class MaxPool2d(Module):
+    def __init__(self, kernel_size: int):
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.x = None
+        self.indices = None
+        self.backward_function = MaxPool2dBackward()
+
+    def forward(self, x: Tensor) -> Tensor:
+        self.x = x
+        out, self.indices = pooling.maxPool2d(x.data, x.shape[0], x.shape[1], x.shape[2], x.shape[3], self.kernel_size, self.kernel_size)
+        out = Tensor(out, prev=(x, self))
+        return out
+
+    def backward(self, dout: np.ndarray) -> np.ndarray:
+        dx = pooling.maxPool2dBackward(dout, self.indices, self.x.shape[0], self.x.shape[1], self.x.shape[2], self.x.shape[3], self.kernel_size, self.kernel_size)
+
+        return dx
+    
     def parameters(self):
         return None
 

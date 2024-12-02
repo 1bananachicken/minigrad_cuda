@@ -1,4 +1,5 @@
 from tensor import *
+from nn.ops.src import conv2d, matmul, matadd, pooling
 # from nn.ops import _Conv
 
 
@@ -60,8 +61,8 @@ class LinearBackward:
             dw = dout * x.data
             db = dout
         else:
-            dx = dout @ self.weight.data
-            dw = dout.T @ x.data
+            dx = matmul.matmul(dout, self.weight.data, dout.shape[0], self.weight.shape[0], self.weight.shape[1])
+            dw = matmul.matmul(dout.T, x.data, dout.shape[1], x.shape[0], x.shape[1])
             db = np.sum(dout, axis=0, keepdims=True)
         return dx, dw, db
 
@@ -77,6 +78,9 @@ class SoftmaxBackward:
     def __call__(self, sm: Tensor, dout: np.ndarray) -> np.ndarray:
         return dout * sm.data * (1 - sm.data)
 
+
+class MaxPool2dBackward:
+    def
 
 class CrossEntropyLossBackward:
     def __call__(self, pred: Tensor, target: Tensor) -> np.ndarray:

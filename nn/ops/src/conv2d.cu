@@ -27,7 +27,7 @@ __global__ void Conv2dForwardKernel(float *X, float *K, float *Y, int N, int H, 
 
         float accumulator = 0.0f;
 
-        for (int k = 0; k < GEMM_K; ++k)
+        FORLOOP(k, GEMM_K)
         {
             int ic = k / (KH * KW);
             int k_res = k % (KH * KW);
@@ -72,7 +72,7 @@ __global__ void Conv2dBackwardKernelDX(float *K, float *Dout, float *DX, int N, 
 
         float accumulator = 0.0f;
 
-        for (int k = 0; k < GEMM_K; ++k)
+        FORLOOP(k, GEMM_K)
         {
             int oc = k;
             float elem_k = K[IDX2C4D(oc, ic, kh, kw, C_in, KH, KW)];
@@ -80,6 +80,7 @@ __global__ void Conv2dBackwardKernelDX(float *K, float *Dout, float *DX, int N, 
             accumulator += elem_k * elem_dout;
 
         }
+        // 这里他妈一定不能写成+=，多线程冲突！！
         atomicAdd(&DX[IDX2C4D(n, ic, ih, iw, C_in, H, W)], accumulator);
     }
 }
@@ -106,7 +107,7 @@ __global__ void Conv2dBackwardKernelDK(float *X, float *Dout, float *DK, int N, 
 
         float accumulator = 0.0f;
 
-        for (int k = 0; k < GEMM_K; ++k)
+        FORLOOP(k, GEMM_K)
         {
             int n = k / (OH * OW);
             int k_res = k % (OH * OW);
@@ -124,6 +125,7 @@ __global__ void Conv2dBackwardKernelDK(float *X, float *Dout, float *DK, int N, 
     }
 }
 
+// 数组索引别他妈溢出了
 float* Conv2d(float *X, float *kernel, int N, int H, int W, int C_in, int C_out, int KH, int KW, int stride, int M, int K, int N_O)
 {   
     float *kernel_device, *X_device, *Y_device;
@@ -194,7 +196,8 @@ float* Conv2dBackwardDK(float *X, float *Dout, int N, int H, int W, int C_in, in
 
     Conv2dBackwardKernelDK<<<grid_dim, block_dim>>>(X_device, Dout_device, DK_device, N, H, W, C_in, C_out, KH, KW, stride);
 
-    cudaDeviceSynchronize();
+    checkCudaError(cudaGetLastError(), __FILE__, __LINE__);
+    checkCudaError(cudaDeviceSynchronize(), __FILE__, __LINE__);
     
     checkCudaError(cudaMemcpy(DK_host, DK_device, M * N_O * sizeof(float), cudaMemcpyDeviceToHost), __FILE__, __LINE__);
     checkCudaError(cudaFree(X_device), __FILE__, __LINE__);
@@ -203,49 +206,3 @@ float* Conv2dBackwardDK(float *X, float *Dout, int N, int H, int W, int C_in, in
 
     return DK_host;
 }
-
-// int main()
-// {
-//     int N = 128, C_in = 8, H = 64, W = 64;
-//     int C_out = 16, KH = 3, KW = 3, stride = 1;
-//
-//     int OH = (H - KH + 1) / stride;
-//     int OW = (W - KW + 1) / stride;
-//     int M = C_out;
-//     int K = C_in * KH * KW;
-//     int N_O = N * OH * OW;
-//
-//     float *A = (float*)malloc(M * K * sizeof(float));
-// //     float *B = (float*)malloc(K * N_O * sizeof(float));
-//     float *B = (float*)malloc(N * C_in * H * W * sizeof(float));
-//     float *C = nullptr;
-//     float *D = nullptr;
-//
-//     for (int i = 0; i < M * K; ++i)
-//         A[i] = (float)rand() / RAND_MAX;
-//
-//     for (int i = 0; i < N * C_in * H * W; ++i)
-//         B[i] = (float)rand() / RAND_MAX;
-//     // float *A_device, *B_device, *C_device;
-//
-//     // cudaMalloc(&A_device, M * K * sizeof(float));
-//     // cudaMalloc(&B_device, K * N_O * sizeof(float));
-//     // cudaMalloc(&C_device, M * N_O * sizeof(float));
-//     for (int i = 0; i < 100; ++i)
-//     {
-//         C = Conv2d(B, A, N, H, W, C_in, C_out, KH, KW, stride, M, K, N_O);
-//         D = Conv2d(B, A, N, H, W, C_in, C_out, KH, KW, stride, M, K, N_O);
-//     }
-//
-//     // cudaMemcpy(A_device, A, M * K * sizeof(float), cudaMemcpyHostToDevice);
-//     // cudaMemcpy(B_device, B, K * N_O * sizeof(float), cudaMemcpyHostToDevice);
-//
-//     // dim3 block_size(BLOCK_DIM, BLOCK_DIM);
-//     // dim3 grid_size((M + BLOCK_DIM - 1) / BLOCK_DIM, (N_O + BLOCK_DIM - 1) / BLOCK_DIM);
-//
-//     // Conv2dForwardKernel<<<grid_size, block_size>>>(B_device, A_device, C_device, N, H, W, C_in, C_out, KH, KW, stride);
-//
-//     // cudaMemcpy(C, C_device, M * N_O * sizeof(float), cudaMemcpyDeviceToHost);
-//
-//     return 0;
-// }
