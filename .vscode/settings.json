@@ -45,5 +45,6 @@
         "streambuf": "cpp",
         "typeinfo": "cpp",
         "cstring": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/home/mengyan003/yzcyzcyzc/minigrad/nn/ops"
 }
